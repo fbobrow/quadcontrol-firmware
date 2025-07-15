@@ -6,7 +6,8 @@
       "**/*.cmd": true,
       "**/build": true,
       "**/app-config": true,
-      "**/Makefile": true
+      "**/Makefile": true,
+      "**/.vscode": true
     },
     "files.associations": {
       "debug.h": "c",
