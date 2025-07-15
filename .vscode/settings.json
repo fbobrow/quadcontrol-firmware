@@ -1,0 +1,11 @@
+{
+    "files.exclude": {
+      "**/.gitignore": true,
+      "**/.gitmodules": true,
+      "**/*.o": true,
+      "**/*.cmd": true,
+      "**/build": true,
+      "**/app-config": true,
+      "**/Makefile": true
+    },
+}
