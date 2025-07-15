@@ -1,7 +1,5 @@
 #include "FreeRTOS.h"      // FreeRTOS core definitions (needed for task handling and timing)
 #include "task.h"          // FreeRTOS task functions (e.g., vTaskDelay)
-#include "supervisor.h"    // Functions to check flight status (e.g., supervisorIsArmed)
-#include "motors.h"        // Low-level motor control interface (e.g., motorsSetRatio)
 #include "debug.h"         // Debug printing functions (e.g., DEBUG_PRINT)
 
 // Main application loop
