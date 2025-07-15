@@ -1,0 +1,1 @@
+obj-y += src/hello_world.o

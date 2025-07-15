@@ -1,0 +1,4 @@
+crazyflie-firmware
+build
+*.o
+*.cmd
