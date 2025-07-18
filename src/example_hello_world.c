@@ -10,7 +10,7 @@ void appMain(void *param)
     {
         // Print message to console
         DEBUG_PRINT("Hello world!\n");
-
+        
         // Wait for 100 milliseconds (10 Hz loop)
         vTaskDelay(pdMS_TO_TICKS(100));
     }
