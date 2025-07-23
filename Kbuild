@@ -1,1 +1,1 @@
-obj-y += src/example_hello_world.o
+obj-y += src/examples/led_blink.o

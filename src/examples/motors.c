@@ -1,8 +1,8 @@
 #include "FreeRTOS.h"      // FreeRTOS core definitions (needed for task handling and timing)
 #include "task.h"          // FreeRTOS task functions (e.g., vTaskDelay)
 #include "supervisor.h"    // Functions to check flight status (e.g., supervisorIsArmed)
-#include "motors.h"        // Low-level motor control interface (e.g., motorsSetRatio)
 #include "debug.h"         // Debug printing functions (e.g., DEBUG_PRINT)
+#include "motors.h"        // Low-level motor control interface (e.g., motorsSetRatio)
 
 // Main application loop
 void appMain(void *param)
@@ -23,7 +23,6 @@ void appMain(void *param)
             DEBUG_PRINT("Stop motor 1\n");
             motorsSetRatio(MOTOR_M1, 0);
         }
-
         // Wait for 100 milliseconds before checking again (10 Hz loop)
         vTaskDelay(pdMS_TO_TICKS(100));
     }

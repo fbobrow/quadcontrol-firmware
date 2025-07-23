@@ -14,7 +14,8 @@
       "motors.h": "c",
       "supervisor.h": "c",
       "task.h": "c",
-      "freertos.h": "c"
+      "freertos.h": "c",
+      "estimator.h": "c"
     },
     "C_Cpp.errorSquiggles": "disabled",
 }
