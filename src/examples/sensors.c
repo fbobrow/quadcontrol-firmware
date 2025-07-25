@@ -34,9 +34,11 @@ void appMain(void *param)
                 break;
             case MeasurementTypeTOF:
                 d = m.data.tof.distance;
+                break;
             case MeasurementTypeFlow:
                 px = m.data.flow.dpixelx;
                 py = m.data.flow.dpixely;
+                break;
             default:
                 break;
             }
