@@ -1,0 +1,1 @@
+obj-y += src/examples/led_blink.o

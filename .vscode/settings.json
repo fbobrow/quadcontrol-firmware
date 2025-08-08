@@ -1,0 +1,21 @@
+{
+    "files.exclude": {
+      "**/.gitignore": true,
+      "**/.gitmodules": true,
+      "**/*.o": true,
+      "**/*.cmd": true,
+      "**/build": true,
+      "**/app-config": true,
+      "**/Makefile": true,
+      "**/.vscode": true
+    },
+    "files.associations": {
+      "debug.h": "c",
+      "motors.h": "c",
+      "supervisor.h": "c",
+      "task.h": "c",
+      "freertos.h": "c",
+      "estimator.h": "c"
+    },
+    "C_Cpp.errorSquiggles": "disabled",
+}
