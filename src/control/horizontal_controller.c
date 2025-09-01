@@ -8,35 +8,28 @@
 #include "debug.h"      // Debug printing functions (e.g., DEBUG_PRINT)
 #include "log.h"        // Logging utilities to send data to the CFClient
 
-// Global parameters
-static const float pi = 3.1416f; // Mathematical constant
-static const float g = 9.81f;    // Gravitational acceleration [m/s^2]
-static const float dt = 0.005f;  // Loop time step [s] (5 ms -> 200 Hz)
+// Motors
+float pwm1, pwm2, pwm3, pwm4; // PWM
 
 // Sensors
-float ax, ay, az; // Accelerometer [m/s^2]
-float gx, gy, gz; // Gyroscope [rad/s]
-float d;          // Range [m]
-float px, py;     // Optical flow [pixels]
-
-// Motors
-float pwm1, pwm2, pwm3, pwm4; // PWM values [0.0-1.0]
+float ax, ay, az;             // Accelerometer [m/s^2]
+float gx, gy, gz;             // Gyroscope [rad/s]
+float d;                      // Range [m]
+float px, py;                 // Optical flow [pixels]
 
 // System inputs
-float ft;         // Total thrust [N]
-float tx, ty, tz; // Torques [N.m]
+float ft;                     // Thrust force [N]
+float tx, ty, tz;             // Torques [N.m]
 
 // System states
-float phi, theta, psi; // Euler angles [rad]
-float wx, wy, wz;      // Angular velocity [rad/s]
-float x, y, z;         // Position [m]
-float vx, vy, vz;      // Velocity [m/s]
+float phi, theta, psi;        // Euler angles [rad]
+float wx, wy, wz;             // Angular velocity [rad/s]
+float x, y, z;                // Position [m]
+float vx, vy, vz;             // Velocity [m/s]
 
 // System references
 float phi_r, theta_r, psi_r; // Euler angles [rad]
-float wx_r, wy_r, wz_r;      // Angular velocity [rad/s]
 float x_r, y_r, z_r;         // Position [m]
-float vx_r, vy_r, vz_r;      // Velocity [m/s]
 
 // Auxiliary variables for logging Euler angles (CFClient uses degrees and not radians)
 float log_phi, log_theta, log_psi;
@@ -213,9 +206,9 @@ void attitudeController()
     float kd = 26.67f;  // State regulator gain for angular velocity error [1/s]
 
     // Compute torques required
-    tx = Ixx * (kp * (phi_r - phi) + kd * (wx_r - wx));
-    ty = Iyy * (kp * (theta_r - theta) + kd * (wy_r - wy));
-    tz = Izz * ((kp / 4.0f) * (psi_r - psi) + (kd / 2.0f) * (wz_r - wz)); // Settling time 2x slower (0.6s) for yaw
+    tx = Ixx * (kp * (phi_r - phi) - kd * wx);
+    ty = Iyy * (kp * (theta_r - theta) - kd * wy);
+    tz = Izz * ((kp / 4.0f) * (psi_r - psi) - (kd / 2.0f) * wz); // Settling time 2x slower (0.6s) for yaw
 }
 
 // Estimate vertical position/velocity from range sensor
@@ -256,7 +249,7 @@ void verticalController()
     static float z_int;
 
     // Compute total thrust required
-    ft = m * (g + ki * z_int + kp * (z_r - z) + kd * (vz_r - vz));
+    ft = m * (g + ki * z_int + kp * (z_r - z) - kd * vz);
     z_int += (z_r - z) * dt;
 }
 
@@ -293,8 +286,8 @@ void horizontalController()
     static const float kd = 2.67f;
 
     // Compute angle reference (nested control)
-    phi_r = -(1.0f / g) * (kp * (y_r - y) + kd * (vy_r - vy));
-    theta_r = (1.0f / g) * (kp * (x_r - x) + kd * (vx_r - vx));
+    phi_r = -(1.0f / g) * (kp * (y_r - y) - kd * vy);
+    theta_r = (1.0f / g) * (kp * (x_r - x) - kd * vx);
 }
 
 // Main application task
@@ -306,7 +299,7 @@ void appMain(void *param)
         reference();                  // Get reference setpoints from commander module
         sensors();                    // Get sensor readings from estimator module
         attitudeEstimator();          // Estimate orientation from IMU sensor
-        verticalEstimator();          // Estimate vertical position/velocity from range sensro
+        verticalEstimator();          // Estimate vertical position/velocity from range sensor
         horizontalEstimator();        // Estimate horizontal position/velocity from optical flow sensor
         horizontalController();       // Compute desired roll/pitch angles
         verticalController();         // Compute desired total thrust

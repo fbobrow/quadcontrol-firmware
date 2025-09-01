@@ -4,8 +4,7 @@
 #include "commander.h"     // Access to commanded setpoints (e.g., commanderGetSetpoint)
 #include "motors.h"        // Low-level motor control interface (e.g., motorsSetRatio)
 
-// Motor constants (derived in Lab 2)
-// These represent coefficients of the quadratic motor model: PWM = a_2 * omega^2 + a_1 * omega
+// Motor coefficients of the quadratic model: PWM = a_2 * omega^2 + a_1 * omega
 const float a_2 = 6.14e-8;
 const float a_1 = 2.34e-4;
 

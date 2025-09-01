@@ -6,8 +6,8 @@
 #include "debug.h"         // Debug printing functions (e.g., DEBUG_PRINT)
 
 // Motor coefficients of the quadratic model: PWM = a_2 * omega^2 + a_1 * omega
-const float a_2 = 6.14e-8;
-const float a_1 = 2.34e-4;
+const float a_2 = 0.0f;
+const float a_1 = 0.0f;
 
 // Global variables to store the desired setpoint, the current state (not used here), 
 // the computed PWM value, and the desired angular velocity (omega)
@@ -45,11 +45,8 @@ void appMain(void *param)
             pwm = 0.0f;
         }
 
-        // Send the PWM signal to all four motors (M1–M4), scaling it to match the expected range [0, UINT16_MAX]
+        // Send the PWM signal to motors M1, scaling it to match the expected range [0, UINT16_MAX]
         motorsSetRatio(MOTOR_M1, pwm * UINT16_MAX);
-        motorsSetRatio(MOTOR_M2, pwm * UINT16_MAX);
-        motorsSetRatio(MOTOR_M3, pwm * UINT16_MAX);
-        motorsSetRatio(MOTOR_M4, pwm * UINT16_MAX);
 
         // Wait for 100 milliseconds before running the next iteration (10 Hz control loop)
         vTaskDelay(pdMS_TO_TICKS(100));

@@ -1,108 +1,97 @@
+#include "math.h"       // Math functions (e.g., sqrtf, roundf, powf)
 #include "FreeRTOS.h"   // FreeRTOS core definitions (needed for task handling and timing)
 #include "task.h"       // FreeRTOS task functions (e.g., vTaskDelay)
 #include "supervisor.h" // Functions to check flight status (e.g., supervisorIsArmed)
 #include "commander.h"  // Access to commanded setpoints (e.g., commanderGetSetpoint)
+#include "estimator.h"  // Estimation framework for sensor fusion
 #include "motors.h"     // Low-level motor control interface (e.g., motorsSetRatio)
 #include "debug.h"      // Debug printing functions (e.g., DEBUG_PRINT)
-#include "math.h"       // Math functions (e.g., sqrtf, roundf, powf)
+#include "log.h"        // Logging utilities to send data to the CFClient
 
-// Quadcopter parameters (derived in Lab 1)
-const float m = 37.0e-3;    // Mass [kg]
-const float I_xx = 20.0e-6; // Moment of inertia around X [kg·m^2]
-const float I_yy = 20.0e-6; // Moment of inertia around Y [kg·m^2]
-const float I_zz = 40.0e-6; // Moment of inertia around Z [kg·m^2]
-const float l = 35.0e-3;    // Arm length from center to motor [m]
+// Motors
+float pwm1, pwm2, pwm3, pwm4; // PWM
 
-// Motor parameters (derived in Lab 2)
-// These represent coefficients of the quadratic model: PWM = a_2 * omega^2 + a_1 * omega
-const float a_2 = 6.18e-8; // Quadratic coefficient [PWM/(rad/s)^2]
-const float a_1 = 2.34e-4; // Linear coefficient [PWM/(rad/s)]
+// System inputs
+float ft;                     // Thrust force [N]
+float tx, ty, tz;             // Torques [N.m]
 
-// Propeller parameters (derived in Labs 3 and 4)
-const float kl = 1.726e-08; // Thrust coefficient [N·s^2/rad^2]
-const float kd = 1.426e-10; // Drag (torque) coefficient [N·m·s^2/rad^2]
-
-// Global variables to store the desired setpoint, the current state (not used here),
-// the computed PWM value, and the desired angular velocity (omega)
-setpoint_t setpoint;
-state_t state;
-
-// PWM signals for each motor (normalized [0.0 – 1.0])
-float pwm_1, pwm_2, pwm_3, pwm_4;
-
-// Angular velocities for each motor [rad/s]
-float omega_1, omega_2, omega_3, omega_4;
-
-// Control efforts: total thrust and torques around X, Y, Z axes
-float f_t, tau_phi, tau_theta, tau_psi;
-
-// Computes control efforts based on desired position (from setpoint)
-void command()
+// Get reference setpoints from commander module
+void reference()
 {
-    // Fetch the latest setpoint from the commander and also fetch the current estimated state (not used here)
+    // Declare variables that store the most recent setpoint and state from commander
+    static setpoint_t setpoint;
+    static state_t state;
+
+    // Retrieve the current commanded setpoints and state from commander module
     commanderGetSetpoint(&setpoint, &state);
 
-    // Compute control efforts (thrust and torques) based on setpoint position
-    // These are proportional controllers for demonstration purposes
-    f_t = roundf((setpoint.position.z) * 2.0f) / 100.0f;        // Thrust (N)
-    tau_phi = -roundf((setpoint.position.y) * 2.0f) / 1000.0f;  // Roll torque (N·m)
-    tau_theta = roundf((setpoint.position.x) * 2.0f) / 1000.0f; // Pitch torque (N·m)
-    // tau_psi remains 0.0f (no yaw control in this version)
+    // Extract position references from the received setpoint
+    ft = roundf((setpoint.position.z) * 2.0f) / 100.0f;     // Thrust command [N] (maps 0.5m -> 0.01N)
+    tx = -roundf((setpoint.position.y) * 2.0f) / 1000.0f;   // Roll torque command [N.m] (maps 0.5m -> 0.001N.m)
+    ty = roundf((setpoint.position.x) * 2.0f) / 1000.0f;    // Pitch torque command [N.m] (maps 0.5m -> 0.001N.m)
+    tz = 0.0f;                                              // Yaw torque command [N.m]
 
     // Print debug info for the control efforts
-    DEBUG_PRINT("F_t (N): %.2f | tau_phi (N.m): %.3f | tau_theta (N.m): %.3f \n",
-                (double)f_t, (double)tau_phi, (double)tau_theta);
+    DEBUG_PRINT("Ft (N): %.2f | Tx (N.m): %.3f | Ty (N.m): %.3f  | Tz (N.m): %.3f \n", (double)ft, (double)tx, (double)ty, (double)tz);
 }
 
-// Mixer function: converts total thrust and torques into individual motor speeds
+// Compute motor commands
 void mixer()
 {
-    // Compute squared angular velocities for each motor based on control allocation matrix
-    omega_1 = (1.0f / 4.0f) * (f_t / kl - tau_phi / (kl * l) - tau_theta / (kl * l) - tau_psi / kd);
-    omega_2 = (1.0f / 4.0f) * (f_t / kl - tau_phi / (kl * l) + tau_theta / (kl * l) + tau_psi / kd);
-    omega_3 = (1.0f / 4.0f) * (f_t / kl + tau_phi / (kl * l) + tau_theta / (kl * l) - tau_psi / kd);
-    omega_4 = (1.0f / 4.0f) * (f_t / kl + tau_phi / (kl * l) - tau_theta / (kl * l) + tau_psi / kd);
+    // Quadcopter parameters
+    static const float l = 35.0e-3f;   // Distance from motor to quadcopter center of mass [m]
+    static const float a2 = 6.14e-8f;  // Quadratic motor model gain [s^2/rad^2]
+    static const float a1 = 2.34e-4f;  // Linear motor model gain [s/rad]
+    static const float kl = 3.18e-08f; // Lift constant [N.s^2]
+    static const float kd = 1.24e-10f; // Drag constant [N.m.s^2]
 
-    // Convert to actual angular velocities by taking square roots (ensuring non-negativity)
-    omega_1 = (omega_1 >= 0.0f) ? sqrtf(omega_1) : 0.0f;
-    omega_2 = (omega_2 >= 0.0f) ? sqrtf(omega_2) : 0.0f;
-    omega_3 = (omega_3 >= 0.0f) ? sqrtf(omega_3) : 0.0f;
-    omega_4 = (omega_4 >= 0.0f) ? sqrtf(omega_4) : 0.0f;
+    // Compute required motor angular velocities squared (omega^2)
+    float omega1 = (1.0f / 4.0f) * (ft / kl - tx / (kl * l) - ty / (kl * l) - tz / kd);
+    float omega2 = (1.0f / 4.0f) * (ft / kl - tx / (kl * l) + ty / (kl * l) + tz / kd);
+    float omega3 = (1.0f / 4.0f) * (ft / kl + tx / (kl * l) + ty / (kl * l) - tz / kd);
+    float omega4 = (1.0f / 4.0f) * (ft / kl + tx / (kl * l) - ty / (kl * l) + tz / kd);
 
-    // Convert angular velocities to PWM commands using the quadratic motor model
-    pwm_1 = a_2 * omega_1 * omega_1 + a_1 * omega_1;
-    pwm_2 = a_2 * omega_2 * omega_2 + a_1 * omega_2;
-    pwm_3 = a_2 * omega_3 * omega_3 + a_1 * omega_3;
-    pwm_4 = a_2 * omega_4 * omega_4 + a_1 * omega_4;
+    // Clamp to non-negative and take square root
+    omega1 = (omega1 >= 0.0f) ? sqrtf(omega1) : 0.0f;
+    omega2 = (omega2 >= 0.0f) ? sqrtf(omega2) : 0.0f;
+    omega3 = (omega3 >= 0.0f) ? sqrtf(omega3) : 0.0f;
+    omega4 = (omega4 >= 0.0f) ? sqrtf(omega4) : 0.0f;
+
+    // Compute motor PWM using motor model
+    pwm1 = a2 * omega1 * omega1 + a1 * omega1;
+    pwm2 = a2 * omega2 * omega2 + a1 * omega2;
+    pwm3 = a2 * omega3 * omega3 + a1 * omega3;
+    pwm4 = a2 * omega4 * omega4 + a1 * omega4;
 }
 
-// Main application loop
+// Apply motor commands
+void motors()
+{
+    // Check is quadcopter is armed or disarmed
+    if (supervisorIsArmed())
+    {
+        // Apply calculated PWM values if is commanded to take-off
+        motorsSetRatio(MOTOR_M1, pwm1 * UINT16_MAX);
+        motorsSetRatio(MOTOR_M2, pwm2 * UINT16_MAX);
+        motorsSetRatio(MOTOR_M3, pwm3 * UINT16_MAX);
+        motorsSetRatio(MOTOR_M4, pwm4 * UINT16_MAX);
+    }
+    else
+    {
+        // Turn-off all motor if disarmed
+        motorsStop();
+    }
+}
+
+// Main application task
 void appMain(void *param)
 {
-    // Infinite loop (runs forever)
+    // Infinite loop (runs at 200Hz)
     while (true)
     {
-        // Check if the drone is armed (i.e., ready to fly)
-        if (supervisorIsArmed())
-        {
-            // Step 1: compute control efforts based on setpoint
-            command();
-            // Step 2: compute motor speeds and PWM from control efforts
-            mixer();
-        }
-        else
-        {
-            // If not armed, stop the motors (set PWM to zero)
-            pwm_1 = pwm_2 = pwm_3 = pwm_4 = 0.0f;
-        }
-
-        // Step 3: apply PWM signals to motors (scaled to 16-bit range)
-        motorsSetRatio(MOTOR_M1, pwm_1 * UINT16_MAX);
-        motorsSetRatio(MOTOR_M2, pwm_2 * UINT16_MAX);
-        motorsSetRatio(MOTOR_M3, pwm_3 * UINT16_MAX);
-        motorsSetRatio(MOTOR_M4, pwm_4 * UINT16_MAX);
-
-        // Wait for 100 milliseconds before running the next iteration (10 Hz control loop)
-        vTaskDelay(pdMS_TO_TICKS(100));
+        reference();                  // Get reference setpoints from commander module
+        mixer();                      // Compute motor commands
+        motors();                     // Apply motor commands
+        vTaskDelay(pdMS_TO_TICKS(5)); // Wait 5 ms
     }
 }
