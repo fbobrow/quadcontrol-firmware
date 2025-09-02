@@ -8,6 +8,18 @@
 #include "debug.h"      // Debug printing functions (e.g., DEBUG_PRINT)
 #include "log.h"        // Logging utilities to send data to the CFClient
 
+// Global parameters
+static const float pi = 3.1416f; // Mathematical constant
+static const float g = 9.81f;    // Gravitational acceleration [m/s^2]
+static const float dt = 0.005f;  // Loop time step [s] (5 ms -> 200 Hz)
+
+// Quadcopter parameters
+static const float l = 35.0e-3f;   // Distance from motor to quadcopter center of mass [m]
+static const float m = 37.0e-3f;   // Mass [kg]
+static const float Ixx = 20.0e-6f; // Moment of inertia around x-axis [kg.m^2]
+static const float Iyy = 20.0e-6f; // Moment of inertia around y-axis [kg.m^2]
+static const float Izz = 40.0e-6f; // Moment of inertia around z-axis [kg.m^2]
+
 // Motors
 float pwm1, pwm2, pwm3, pwm4; // PWM
 
@@ -77,9 +89,9 @@ void sensors()
         {
         // Get accelerometer sensor readings and convert [G's -> m/s^2]
         case MeasurementTypeAcceleration:
-            ax = -measurement.data.acceleration.acc.x * 9.81f;
-            ay = -measurement.data.acceleration.acc.y * 9.81f;
-            az = -measurement.data.acceleration.acc.z * 9.81f;
+            ax = -measurement.data.acceleration.acc.x * g;
+            ay = -measurement.data.acceleration.acc.y * g;
+            az = -measurement.data.acceleration.acc.z * g;
             break;
         // Get gyroscope sensor readings and convert [deg/s -> rad/s]
         case MeasurementTypeGyroscope:
@@ -105,8 +117,7 @@ void sensors()
 // Compute motor commands
 void mixer()
 {
-    // Quadcopter parameters
-    static const float l = 35.0e-3f;  // Distance from motor to quadcopter center of mass [m]
+    // Motor and propeller parameters
     static const float a2 = 6.14e-8f;  // Quadratic motor model gain [s^2/rad^2]
     static const float a1 = 2.34e-4f;  // Linear motor model gain [s/rad]
     static const float kl = 3.18e-08f; // Lift constant [N.s^2]
@@ -196,11 +207,6 @@ void attitudeEstimator()
 // Compute desired torques
 void attitudeController()
 {
-    // Quadcopter parameters
-    static const float Ixx = 20.0e-6f; // Moment of inertia around x-axis [kg.m^2]
-    static const float Iyy = 20.0e-6f; // Moment of inertia around y-axis [kg.m^2]
-    static const float Izz = 40.0e-6f; // Moment of inertia around z-axis [kg.m^2]
-
     // Controller parameters (settling time of 0.3s and overshoot of 0,05%)
     float kp = 240.28f; // State regulator gain for angle error [1/s^2]
     float kd = 26.67f;  // State regulator gain for angular velocity error [1/s]
@@ -214,9 +220,6 @@ void attitudeController()
 // Estimate vertical position/velocity from range sensor
 void verticalEstimator()
 {
-    // Quadcopter parameters
-    float m = 37.0e-3f;
-
     // Estimator parameters
     static const float wc = 10.0f;       // Cutoff frequency for 2nd order low-pass filter [rad/s]   
     static const float zeta = 0.71f;     // Zeta for 2nd order low-pass filter []
@@ -237,9 +240,6 @@ void verticalEstimator()
 // Compute desired total thrust
 void verticalController()
 {
-    // Quadcopter parameters
-    float m = 37.0e-3f;
-
     // Controller parameters (settling time of 2.0s and overshoot of 0,05%)
     static const float kp = 5.41f; // State regulator gain for position error [1/s^2]
     static const float kd = 4.00f; // State regulator gain for velocity error [1/s]
