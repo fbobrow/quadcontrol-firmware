@@ -8,6 +8,18 @@
 #include "debug.h"      // Debug printing functions (e.g., DEBUG_PRINT)
 #include "log.h"        // Logging utilities to send data to the CFClient
 
+// Global parameters
+static const float pi = 3.1416f; // Mathematical constant
+static const float g = 9.81f;    // Gravitational acceleration [m/s^2]
+static const float dt = 0.005f;  // Loop time step [s] (5 ms -> 200 Hz)
+
+// Quadcopter parameters
+static const float l = 35.0e-3f;   // Distance from motor to quadcopter center of mass [m]
+static const float m = 37.0e-3f;   // Mass [kg]
+static const float Ixx = 20.0e-6f; // Moment of inertia around x-axis [kg.m^2]
+static const float Iyy = 20.0e-6f; // Moment of inertia around y-axis [kg.m^2]
+static const float Izz = 40.0e-6f; // Moment of inertia around z-axis [kg.m^2]
+
 // Motors
 float pwm1, pwm2, pwm3, pwm4; // PWM
 
@@ -38,8 +50,7 @@ void reference()
 // Compute motor commands
 void mixer()
 {
-    // Quadcopter parameters
-    static const float l = 35.0e-3f;   // Distance from motor to quadcopter center of mass [m]
+    // Motor and propeller parameters
     static const float a2 = 6.14e-8f;  // Quadratic motor model gain [s^2/rad^2]
     static const float a1 = 2.34e-4f;  // Linear motor model gain [s/rad]
     static const float kl = 3.18e-08f; // Lift constant [N.s^2]

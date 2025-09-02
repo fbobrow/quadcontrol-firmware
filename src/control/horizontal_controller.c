@@ -23,15 +23,15 @@ static const float Izz = 40.0e-6f; // Moment of inertia around z-axis [kg.m^2]
 // Motors
 float pwm1, pwm2, pwm3, pwm4; // PWM
 
+// System inputs
+float ft;                     // Thrust force [N]
+float tx, ty, tz;             // Torques [N.m]
+
 // Sensors
 float ax, ay, az;             // Accelerometer [m/s^2]
 float gx, gy, gz;             // Gyroscope [rad/s]
 float d;                      // Range [m]
 float px, py;                 // Optical flow [pixels]
-
-// System inputs
-float ft;                     // Thrust force [N]
-float tx, ty, tz;             // Torques [N.m]
 
 // System states
 float phi, theta, psi;        // Euler angles [rad]
