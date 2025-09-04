@@ -8,24 +8,24 @@
 #include "debug.h"      // Debug printing functions (e.g., DEBUG_PRINT)
 #include "log.h"        // Logging utilities to send data to the CFClient
 
-// Global parameters
+// Physical constants
 static const float pi = 3.1416f; // Mathematical constant
 static const float g = 9.81f;    // Gravitational acceleration [m/s^2]
 static const float dt = 0.005f;  // Loop time step [s] (5 ms -> 200 Hz)
 
 // Quadcopter parameters
 static const float l = 35.0e-3f;   // Distance from motor to quadcopter center of mass [m]
-static const float m = 37.0e-3f;   // Mass [kg]
+static const float m = 38.6e-3f;   // Mass [kg]
 static const float Ixx = 20.0e-6f; // Moment of inertia around x-axis [kg.m^2]
 static const float Iyy = 20.0e-6f; // Moment of inertia around y-axis [kg.m^2]
 static const float Izz = 40.0e-6f; // Moment of inertia around z-axis [kg.m^2]
 
-// Motors
+// Actuators
 float pwm1, pwm2, pwm3, pwm4; // PWM
 
 // System inputs
 float ft;                     // Thrust force [N]
-float tx, ty, tz;             // Torques [N.m]
+float tx, ty, tz;             // Roll, pitch and yaw torques [N.m]
 
 // Sensors
 float ax, ay, az;             // Accelerometer [m/s^2]
@@ -76,6 +76,65 @@ void reference()
     psi_r = setpoint.position.y * pi / 2.0f; // Yaw angle reference [rad] (maps 0.5m -> 45º)
 }
 
+// Compute motor commands
+void mixer()
+{
+    // Motor and propeller parameters
+    static const float a2 = 6.14e-8f;  // Quadratic motor model gain [s^2/rad^2]
+    static const float a1 = 2.34e-4f;  // Linear motor model gain [s/rad]
+    static const float kl = 3.18e-08f; // Lift constant [N.s^2]
+    static const float kd = 1.24e-10f; // Drag constant [N.m.s^2]
+
+    // Compute required motor angular velocities squared (omega^2)
+    float omega1 = (1.0f / 4.0f) * (ft / kl - tx / (kl * l) - ty / (kl * l) - tz / kd);
+    float omega2 = (1.0f / 4.0f) * (ft / kl - tx / (kl * l) + ty / (kl * l) + tz / kd);
+    float omega3 = (1.0f / 4.0f) * (ft / kl + tx / (kl * l) + ty / (kl * l) - tz / kd);
+    float omega4 = (1.0f / 4.0f) * (ft / kl + tx / (kl * l) - ty / (kl * l) + tz / kd);
+
+    // Clamp to non-negative and take square root
+    omega1 = (omega1 >= 0.0f) ? sqrtf(omega1) : 0.0f;
+    omega2 = (omega2 >= 0.0f) ? sqrtf(omega2) : 0.0f;
+    omega3 = (omega3 >= 0.0f) ? sqrtf(omega3) : 0.0f;
+    omega4 = (omega4 >= 0.0f) ? sqrtf(omega4) : 0.0f;
+
+    // Compute motor PWM using motor model
+    pwm1 = a2 * omega1 * omega1 + a1 * omega1;
+    pwm2 = a2 * omega2 * omega2 + a1 * omega2;
+    pwm3 = a2 * omega3 * omega3 + a1 * omega3;
+    pwm4 = a2 * omega4 * omega4 + a1 * omega4;
+}
+
+// Apply motor commands
+void actuators()
+{
+    // Check is quadcopter is armed or disarmed
+    if (supervisorIsArmed())
+    {
+        // Check if quadcopter has been commanded to take-off or land
+        if (z_r > 0.0f)
+        {
+            // Apply calculated PWM values if is commanded to take-off
+            motorsSetRatio(MOTOR_M1, pwm1 * UINT16_MAX);
+            motorsSetRatio(MOTOR_M2, pwm2 * UINT16_MAX);
+            motorsSetRatio(MOTOR_M3, pwm3 * UINT16_MAX);
+            motorsSetRatio(MOTOR_M4, pwm4 * UINT16_MAX);
+        }
+        else
+        {
+            // Apply idle PWM value if is commanded to land
+            motorsSetRatio(MOTOR_M1, 0.1f * UINT16_MAX);
+            motorsSetRatio(MOTOR_M2, 0.1f * UINT16_MAX);
+            motorsSetRatio(MOTOR_M3, 0.1f * UINT16_MAX);
+            motorsSetRatio(MOTOR_M4, 0.1f * UINT16_MAX);
+        }
+    }
+    else
+    {
+        // Turn-off all motor if disarmed
+        motorsStop();
+    }
+}
+
 // Get sensor readings from estimator module
 void sensors()
 {
@@ -111,65 +170,6 @@ void sensors()
         default:
             break;
         }
-    }
-}
-
-// Compute motor commands
-void mixer()
-{
-    // Motor and propeller parameters
-    static const float a2 = 6.14e-8f;  // Quadratic motor model gain [s^2/rad^2]
-    static const float a1 = 2.34e-4f;  // Linear motor model gain [s/rad]
-    static const float kl = 3.18e-08f; // Lift constant [N.s^2]
-    static const float kd = 1.24e-10f; // Drag constant [N.m.s^2]
-
-    // Compute required motor angular velocities squared (omega^2)
-    float omega1 = (1.0f / 4.0f) * (ft / kl - tx / (kl * l) - ty / (kl * l) - tz / kd);
-    float omega2 = (1.0f / 4.0f) * (ft / kl - tx / (kl * l) + ty / (kl * l) + tz / kd);
-    float omega3 = (1.0f / 4.0f) * (ft / kl + tx / (kl * l) + ty / (kl * l) - tz / kd);
-    float omega4 = (1.0f / 4.0f) * (ft / kl + tx / (kl * l) - ty / (kl * l) + tz / kd);
-
-    // Clamp to non-negative and take square root
-    omega1 = (omega1 >= 0.0f) ? sqrtf(omega1) : 0.0f;
-    omega2 = (omega2 >= 0.0f) ? sqrtf(omega2) : 0.0f;
-    omega3 = (omega3 >= 0.0f) ? sqrtf(omega3) : 0.0f;
-    omega4 = (omega4 >= 0.0f) ? sqrtf(omega4) : 0.0f;
-
-    // Compute motor PWM using motor model
-    pwm1 = a2 * omega1 * omega1 + a1 * omega1;
-    pwm2 = a2 * omega2 * omega2 + a1 * omega2;
-    pwm3 = a2 * omega3 * omega3 + a1 * omega3;
-    pwm4 = a2 * omega4 * omega4 + a1 * omega4;
-}
-
-// Apply motor commands
-void motors()
-{
-    // Check is quadcopter is armed or disarmed
-    if (supervisorIsArmed())
-    {
-        // Check if quadcopter has been commanded to take-off or land
-        if (z_r > 0.0f)
-        {
-            // Apply calculated PWM values if is commanded to take-off
-            motorsSetRatio(MOTOR_M1, pwm1 * UINT16_MAX);
-            motorsSetRatio(MOTOR_M2, pwm2 * UINT16_MAX);
-            motorsSetRatio(MOTOR_M3, pwm3 * UINT16_MAX);
-            motorsSetRatio(MOTOR_M4, pwm4 * UINT16_MAX);
-        }
-        else
-        {
-            // Apply idle PWM value if is commanded to land
-            motorsSetRatio(MOTOR_M1, 0.1f * UINT16_MAX);
-            motorsSetRatio(MOTOR_M2, 0.1f * UINT16_MAX);
-            motorsSetRatio(MOTOR_M3, 0.1f * UINT16_MAX);
-            motorsSetRatio(MOTOR_M4, 0.1f * UINT16_MAX);
-        }
-    }
-    else
-    {
-        // Turn-off all motor if disarmed
-        motorsStop();
     }
 }
 
@@ -305,7 +305,7 @@ void appMain(void *param)
         verticalController();         // Compute desired total thrust
         attitudeController();         // Compute desired torques
         mixer();                      // Compute motor commands
-        motors();                     // Apply motor commands
+        actuators();                  // Apply motor commands
         vTaskDelay(pdMS_TO_TICKS(5)); // Wait 5 ms
     }
 }
