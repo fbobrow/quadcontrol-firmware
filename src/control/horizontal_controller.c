@@ -21,7 +21,7 @@ static const float Iyy = 20.0e-6f; // Moment of inertia around y-axis [kg.m^2]
 static const float Izz = 40.0e-6f; // Moment of inertia around z-axis [kg.m^2]
 
 // Actuators
-float pwm1, pwm2, pwm3, pwm4; // PWM
+float pwm1, pwm2, pwm3, pwm4; // Motors PWM
 
 // System inputs
 float ft;                     // Thrust force [N]
