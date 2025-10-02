@@ -23,25 +23,25 @@ static const float Izz = 40.0e-6f; // Moment of inertia around z-axis [kg.m^2]
 // Actuators
 float pwm1, pwm2, pwm3, pwm4; // Motors PWM
 
-// System inputs
-float ft;                     // Thrust force [N]
-float tx, ty, tz;             // Roll, pitch and yaw torques [N.m]
-
 // Sensors
 float ax, ay, az;             // Accelerometer [m/s^2]
 float gx, gy, gz;             // Gyroscope [rad/s]
 float d;                      // Range [m]
 float px, py;                 // Optical flow [pixels]
 
+// System inputs
+float ft;                     // Thrust force [N]
+float tx, ty, tz;             // Roll, pitch and yaw torques [N.m]
+
 // System states
 float phi, theta, psi;        // Euler angles [rad]
-float wx, wy, wz;             // Angular velocity [rad/s]
-float x, y, z;                // Position [m]
-float vx, vy, vz;             // Velocity [m/s]
+float wx, wy, wz;             // Angular velocities [rad/s]
+float x, y, z;                // Positions [m]
+float vx, vy, vz;             // Velocities [m/s]
 
 // System references
-float phi_r, theta_r, psi_r; // Euler angles [rad]
-float x_r, y_r, z_r;         // Position [m]
+float phi_r, theta_r, psi_r; // Euler angles reference [rad]
+float x_r, y_r, z_r;         // Positions reference [m]
 
 // Auxiliary variables for logging Euler angles (CFClient uses degrees and not radians)
 float log_phi, log_theta, log_psi;
@@ -177,25 +177,26 @@ void sensors()
 void attitudeEstimator()
 {
     // Estimator parameters
-    static const float wc = 1.0f; // Cutoff frequency for complementary filter [rad/s]
+    static const float wc = 1.0f;                    // Cutoff frequency of filter [rad/s]
+    static const float alpha = (wc*dt)/(1.0f+wc*dt); // Weighting factor of filter
 
-    // Use gyroscope for integration
+    // Angular velocity estimation
     wx = gx;
     wy = gy;
     wz = gz;
 
-    // Compute angles from accelerometer
+    // Measured angles from accelerometer
     float phi_a = atan2f(-ay, -az);
     float theta_a = atan2f(ax, sqrt(ay * ay + az * az));
 
-    // Integrate gyroscope rates (Euler)
+    // Measured angles from gyroscope
     float phi_g = phi + (wx + wy * sinf(phi) * tanf(theta) + wz * cosf(phi) * tanf(theta)) * dt;
     float theta_g = theta + (wy * cosf(phi) - wz * sinf(phi)) * dt;
     float psi_g = psi + (wy * sinf(phi) / cosf(theta) + wz * cosf(phi) / cosf(theta)) * dt;
 
-    // Complementary filter: blend gyro (high freq) and accel (low freq)
-    phi = (1.0f - wc * dt) * phi_g + wc * dt * phi_a;
-    theta = (1.0f - wc * dt) * theta_g + wc * dt * theta_a;
+    // Angle estimation (complementary filter: blend high frequency gyroscope with low frequency accelometer)
+    phi = (1.0f - alpha) * phi_g + alpha * phi_a;
+    theta = (1.0f - alpha) * theta_g + alpha * theta_a;
     psi = psi_g; // No absolute reference for yaw
 
     // Auxiliary variables for logging Euler angles (CFClient uses degrees and not radians)
@@ -296,16 +297,17 @@ void appMain(void *param)
     // Infinite loop (runs at 200Hz)
     while (true)
     {
-        reference();                  // Get reference setpoints from commander module
-        sensors();                    // Get sensor readings from estimator module
-        attitudeEstimator();          // Estimate orientation from IMU sensor
+        reference();                  // Read reference setpoints (from Crazyflie Client)
+        sensors();                    // Read raw sensor measurements
+        attitudeEstimator();          // Estimate orientation (roll/pitch/yaw) from IMU sensor
         verticalEstimator();          // Estimate vertical position/velocity from range sensor
-        horizontalEstimator();        // Estimate horizontal position/velocity from optical flow sensor
+        horizontalEstimator();        // Estimate horizontal positions/velocities from optical flow sensor
         horizontalController();       // Compute desired roll/pitch angles
-        verticalController();         // Compute desired total thrust
-        attitudeController();         // Compute desired torques
-        mixer();                      // Compute motor commands
-        actuators();                  // Apply motor commands
-        vTaskDelay(pdMS_TO_TICKS(5)); // Wait 5 ms
+        verticalController();         // Compute desired thrust force
+        attitudeController();         // Compute desired roll/pitch/yaw torques
+        mixer();                      // Convert desired force/torques into motor PWM
+        motors();                     // Send commands to motors
+        vTaskDelay(pdMS_TO_TICKS(5)); // Loop delay (5 ms)
+    }
     }
 }
