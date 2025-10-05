@@ -180,24 +180,24 @@ void attitudeEstimator()
     static const float wc = 1.0f;                    // Cutoff frequency of filter [rad/s]
     static const float alpha = (wc*dt)/(1.0f+wc*dt); // Weighting factor of filter
 
-    // Angular velocity estimation
-    wx = gx;
-    wy = gy;
-    wz = gz;
-
     // Measured angles from accelerometer
     float phi_a = atan2f(-ay, -az);
     float theta_a = atan2f(ax, sqrt(ay * ay + az * az));
 
     // Measured angles from gyroscope
-    float phi_g = phi + (wx + wy * sinf(phi) * tanf(theta) + wz * cosf(phi) * tanf(theta)) * dt;
-    float theta_g = theta + (wy * cosf(phi) - wz * sinf(phi)) * dt;
-    float psi_g = psi + (wy * sinf(phi) / cosf(theta) + wz * cosf(phi) / cosf(theta)) * dt;
+    float phi_g = phi + (gx + gy * sinf(phi) * tanf(theta) + gz * cosf(phi) * tanf(theta)) * dt;
+    float theta_g = theta + (gy * cosf(phi) - gz * sinf(phi)) * dt;
+    float psi_g = psi + (gy * sinf(phi) / cosf(theta) + gz * cosf(phi) / cosf(theta)) * dt;
 
-    // Angle estimation (complementary filter: blend high frequency gyroscope with low frequency accelometer)
+    // Estimated angles (accelerometer and gyroscope with complementary filter)
     phi = (1.0f - alpha) * phi_g + alpha * phi_a;
     theta = (1.0f - alpha) * theta_g + alpha * theta_a;
     psi = psi_g; // No absolute reference for yaw
+
+    // Angular velocities estimation
+    wx = gx;
+    wy = gy;
+    wz = gz;
 
     // Auxiliary variables for logging Euler angles (CFClient uses degrees and not radians)
     log_phi = phi * 180.0f / pi;

@@ -60,9 +60,6 @@ void reference()
     tx = -roundf((setpoint.position.y) * 2.0f) / 1000.0f;   // Roll torque command [N.m] (maps 0.5m -> 0.001N.m)
     ty =  roundf((setpoint.position.x) * 2.0f) / 1000.0f;   // Pitch torque command [N.m] (maps 0.5m -> 0.001N.m)
     tz = 0.0f;                                              // Yaw torque command [N.m]
-
-    // Print debug info for the control efforts
-    DEBUG_PRINT("Ft (N): %.2f | Tx (N.m): %.3f | Ty (N.m): %.3f  | Tz (N.m): %.3f \n", (double)ft, (double)tx, (double)ty, (double)tz);
 }
 
 // Compute motor commands
@@ -143,7 +140,34 @@ void sensors()
 
 // Estimate orientation from IMU sensor
 void attitudeEstimator()
-{ 
+{
+    // Estimator parameters
+    static const float wc = 1.0f;                    // Cutoff frequency of filter [rad/s]
+    static const float alpha = (wc*dt)/(1.0f+wc*dt); // Weighting factor of filter
+
+    // Measured angles from accelerometer
+    float phi_a = atan2f(-ay, -az);
+    float theta_a = atan2f(ax, sqrt(ay * ay + az * az));
+
+    // Measured angles from gyroscope
+    float phi_g = phi + (gx + gy * sinf(phi) * tanf(theta) + gz * cosf(phi) * tanf(theta)) * dt;
+    float theta_g = theta + (gy * cosf(phi) - gz * sinf(phi)) * dt;
+    float psi_g = psi + (gy * sinf(phi) / cosf(theta) + gz * cosf(phi) / cosf(theta)) * dt;
+
+    // Estimated angles (accelerometer and gyroscope with complementary filter)
+    phi = (1.0f - alpha) * phi_g + alpha * phi_a;
+    theta = (1.0f - alpha) * theta_g + alpha * theta_a;
+    psi = psi_g; // No absolute reference for yaw
+
+    // Angular velocities estimation
+    wx = gx;
+    wy = gy;
+    wz = gz;
+
+    // Auxiliary variables for logging Euler angles (CFClient uses degrees and not radians)
+    log_phi = phi * 180.0f / pi;
+    log_theta = -theta * 180.0f / pi;
+    log_psi = psi * 180.0f / pi;
 }
 
 // Main application task
@@ -156,7 +180,7 @@ void appMain(void *param)
         sensors();                    // Read raw sensor measurements
         attitudeEstimator();          // Estimate orientation (roll/pitch/yaw) from IMU sensor
         mixer();                      // Convert desired force/torques into motor PWM
-        motors();                     // Send commands to motors
+        actuators();                  // Send commands to motors
         vTaskDelay(pdMS_TO_TICKS(5)); // Loop delay (5 ms)
     }
 }
